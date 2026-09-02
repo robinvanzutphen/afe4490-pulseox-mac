@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/usr/bin/env bash
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -28,7 +28,7 @@ python -m PyInstaller --noconfirm --clean --windowed --onedir \
   --osx-bundle-identifier nl.amsterdamumc.bmo.afe4490-pulseox \
   --target-architecture "$ARCH" \
   --hidden-import serial.tools.list_ports \
-  "${SIGN_ARGS[@]}" \
+  ${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"} \
   live_viewer.py
 
 "dist/AFE4490_PulseOx.app/Contents/MacOS/AFE4490_PulseOx" --self-test
