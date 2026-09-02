@@ -1,0 +1,45 @@
+AFE4490 Pulse Oximeter - student application (macOS)
+====================================================
+
+You do NOT need to install Python or anything else. AFE4490_PulseOx.app is a
+self-contained program.
+
+
+FIRST TIME ON A MAC: let macOS open it (one-time, ~10 seconds)
+--------------------------------------------------------------
+Because you downloaded this app, macOS blocks the first launch and says something
+like "Apple could not verify AFE4490_PulseOx.app is free of malware". This is
+only because the app is not signed with a paid Apple Developer ID. It is safe -
+it is exactly the app your instructor built. To open it:
+
+  1. In Finder, hold CONTROL and click (or right-click) AFE4490_PulseOx.app
+  2. Choose  Open
+  3. In the dialog, click  Open  again
+
+You only do this once. After that, double-clicking works normally.
+
+If you don't see an "Open" button, go to:
+  Apple menu -> System Settings -> Privacy & Security -> scroll down ->
+  next to the blocked-app message click  "Open Anyway".
+
+
+USING THE APP
+-------------
+  1. Close any serial-terminal program that might be using the board.
+  2. Plug the AFE4490 board into USB.
+  3. Open AFE4490_PulseOx.app. It finds the board automatically; if it cannot,
+     it asks you to choose the /dev/cu.* serial port.
+  4. Click Start. Use the Acquisition tab for the live IR/Red PPG, and the
+     Analysis tab for heart rate and the SpO2 walkthrough.
+
+Your recordings are saved to:
+     ~/Documents/AFE4490 PulseOx data
+
+
+NOTE: use the app version that matches your Mac. "Apple Silicon" (M1/M2/M3/M4)
+and older "Intel" Macs use different builds. If the app will not open at all
+(not the security warning above), you may have the wrong one - ask your
+instructor for the other build.
+
+Not a medical device. Teaching / evaluation only; the displayed SpO2 value is
+not clinically calibrated. Do not rely on it for any health decision.

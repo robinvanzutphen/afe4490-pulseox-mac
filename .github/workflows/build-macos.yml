@@ -1,0 +1,38 @@
+name: Build macOS applications
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        # GitHub-hosted macOS runners: the plain label is Apple Silicon (arm64),
+        # the "-intel" label is Intel (x86_64). Both are free for public repos.
+        # Bump the version together when desired, e.g. macos-26 / macos-26-intel.
+        include:
+          - runner: macos-15         # Apple Silicon (M1/M2/M3/M4)
+            arch: arm64
+          - runner: macos-15-intel   # Intel Macs
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Build and self-test app
+        env:
+          MACOS_ARCH: ${{ matrix.arch }}
+        run: bash build_macos.sh
+      - name: Upload packaged app
+        uses: actions/upload-artifact@v7
+        with:
+          name: AFE4490-PulseOx-macOS-${{ matrix.arch }}
+          path: release/AFE4490_PulseOx_macOS_${{ matrix.arch }}.zip
+          if-no-files-found: error

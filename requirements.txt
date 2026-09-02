@@ -1,0 +1,5 @@
+# Install with: python -m pip install -r requirements.txt
+numpy
+pyqtgraph
+PyQt5
+pyserial
