@@ -15,11 +15,12 @@ USB CDC driver in the system, so no driver install is normally needed. List devi
 python3 -m serial.tools.list_ports -v
 ```
 
-> Hardware note: TI documents this EVM's native GUI for Windows. The board's USB
-> descriptors must still be confirmed on a physical Mac - if no `/dev/cu.*` device
-> appears for it, the blocker is the EVM's USB enumeration on that macOS release, not
-> the Python code. Verify on real hardware before class (see the acceptance test in
-> [VERIFICATION_AND_SETTINGS.md](VERIFICATION_AND_SETTINGS.md)).
+> Hardware note: the EVM is a standard USB CDC-ACM device (SLAU480C), so macOS should
+> enumerate it automatically with no driver install. This still needs confirming on a
+> physical Mac - if no `/dev/cu.*` device appears, the blocker is USB enumeration on
+> that macOS release, not the Python code. See
+> **[CONNECTING_ON_MAC.md](CONNECTING_ON_MAC.md)** for the full first-connection
+> assessment, the macOS-vs-Windows differences, and a diagnostic checklist.
 
 Only one program can own the port at a time; close any serial terminal first. (TI's
 native GUI is Windows-only, so there is nothing TI to close on a Mac.)

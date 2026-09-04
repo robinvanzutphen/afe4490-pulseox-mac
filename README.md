@@ -70,6 +70,8 @@ Full steps: **[docs/BACKUP_RUN_FROM_PYTHON.md](docs/BACKUP_RUN_FROM_PYTHON.md)**
 - [`docs/GATEKEEPER.md`](docs/GATEKEEPER.md): the macOS "unidentified developer" warning.
 - [`docs/BACKUP_RUN_FROM_PYTHON.md`](docs/BACKUP_RUN_FROM_PYTHON.md): run from Python.
 - [`docs/SETUP.md`](docs/SETUP.md): USB/serial-port setup on macOS.
+- [`docs/CONNECTING_ON_MAC.md`](docs/CONNECTING_ON_MAC.md): will the board connect on a
+  Mac? First-connection assessment and macOS-vs-Windows serial differences.
 - [`docs/DEVICE_SCOPE.md`](docs/DEVICE_SCOPE.md): what the board does and the
   raw-signal-to-SpO2 teaching pipeline.
 - [`docs/VERIFICATION_AND_SETTINGS.md`](docs/VERIFICATION_AND_SETTINGS.md): exact
