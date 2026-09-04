@@ -227,7 +227,7 @@ class StreamWorker(QtCore.QThread):
 #  Main window                                                                #
 # --------------------------------------------------------------------------- #
 class LiveViewer(QtWidgets.QMainWindow):
-    def __init__(self, port):
+    def __init__(self, port, test_mode=False):
         super().__init__()
         self.port = port
         self.setWindowTitle("AFE4490 SpO2 EVM  -  Live PPG (direct serial)")
@@ -274,7 +274,8 @@ class LiveViewer(QtWidgets.QMainWindow):
         self.worker.connected.connect(self._on_connected)
         self.worker.status.connect(self._on_status)
         self.worker.failed.connect(self._on_failed)
-        self.worker.start()
+        if not test_mode:            # test_mode drives the pipeline without a serial port
+            self.worker.start()
 
         # timers
         self.draw_timer = QtCore.QTimer(self); self.draw_timer.timeout.connect(self._drain_and_draw)
@@ -1010,18 +1011,166 @@ class LiveViewer(QtWidgets.QMainWindow):
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save waveform", default, "CSV (*.csv)")
         if not path:
             return
+        n = self._write_csv(path)
+        self.lbl_conn.setText("saved %d samples -> %s" % (n, os.path.basename(path)))
+
+    def _write_csv(self, path):
+        """Write the raw recording buffer to a CSV. Returns the row count.
+        Split out from _save so the save logic can be tested without a dialog."""
         rows = list(self.rec)
         with open(path, "w", newline="") as f:
             wr = csv.writer(f)
             wr.writerow(["time_s"] + CHANNELS)
             for row in rows:
                 wr.writerow(["%.4f" % row[0]] + list(row[1:]))
-        self.lbl_conn.setText("saved %d samples -> %s" % (len(rows), os.path.basename(path)))
+        return len(rows)
 
     def closeEvent(self, ev):
         self.draw_timer.stop(); self.an_timer.stop()
         self.worker.stop(); self.worker.wait(2000)
         super().closeEvent(ev)
+
+
+def _gui_selftest(app):
+    """Full-window functional test with NO serial hardware.
+
+    Builds the real LiveViewer, injects a synthetic 75 bpm PPG, drives the live
+    pipeline, exercises the controls, checks heart rate + SpO2, saves a CSV and
+    verifies it, and writes PNG screenshots of the rendered window. Raises on any
+    failure; prints 'GUI-TEST PASSED' on success. Screenshots/CSV go to
+    $GUI_TEST_OUTDIR (default: current directory). Works with the native window or
+    the 'offscreen' Qt platform (headless)."""
+    outdir = os.environ.get("GUI_TEST_OUTDIR") or os.getcwd()
+    os.makedirs(outdir, exist_ok=True)
+
+    def log(msg):
+        print("[gui-test] " + msg, flush=True)
+
+    log("Qt platform = %s   outdir = %s" % (app.platformName(), outdir))
+
+    win = LiveViewer("GUI-TEST", test_mode=True)
+    win.draw_timer.stop()                 # drive the pipeline deterministically
+    win.an_timer.stop()
+    win.show()
+    app.processEvents()
+    assert win.isVisible() or app.platformName() == "offscreen", "window did not become visible"
+    log("LiveViewer window constructed and shown")
+
+    # --- synthetic 6-channel stream: 12 s @ 500 Hz, 1.25 Hz pulse (= 75 bpm) ----
+    fs, secs = FS_NOMINAL, 12
+    n = fs * secs
+    k = np.arange(n)
+    pulse = np.sin(2 * np.pi * 1.25 * k / fs)
+    ir_ppg = (1_000_000 + 10_000 * pulse).astype(int)     # DC + ~1% AC
+    red_ppg = (800_000 + 5_000 * pulse).astype(int)        # DC + ~0.6% AC -> R~0.63
+    ir_amb = np.full(n, 3_000, int)
+    red_amb = np.full(n, 3_500, int)
+    ir_raw, red_raw = ir_ppg + ir_amb, red_ppg + red_amb
+    # CHANNELS order: LED2VAL, ALED2VAL, LED1VAL, ALED1VAL, LED2-ALED2VAL, LED1-ALED1VAL
+    packets = list(zip(red_raw, red_amb, ir_raw, ir_amb, red_ppg, ir_ppg))
+
+    win.rb_cont.setChecked(True)
+    win.btn_start.setChecked(True)                          # simulate pressing Start
+    assert win.acquiring, "acquiring flag not set after Start"
+    win.t0 -= float(secs)                                   # pretend 12 s elapsed
+    for p in packets:
+        win.q.put(tuple(int(x) for x in p))
+    win._drain_and_draw()
+    win._update_analysis()
+    app.processEvents()
+
+    # 1) live curves populated
+    xi, _ = win.curve_ir.getData()
+    xr, _ = win.curve_red.getData()
+    assert xi is not None and len(xi) > 500, "IR curve not populated"
+    assert xr is not None and len(xr) > 500, "Red curve not populated"
+    log("live plots populated (IR=%d, Red=%d points)" % (len(xi), len(xr)))
+
+    # 2) recording buffer holds every raw sample
+    assert len(win.rec) == n, "recording buffer %d != %d" % (len(win.rec), n)
+
+    # 3) heart rate via FFT ~ 75 bpm
+    hr_fft = float(win.lbl_hr.text())
+    assert 70 <= hr_fft <= 80, "FFT HR out of range: %r" % win.lbl_hr.text()
+    log("heart rate (FFT) = %.0f bpm" % hr_fft)
+
+    def snap(name):
+        path = os.path.join(outdir, name)
+        assert win.grab().save(path) and os.path.getsize(path) > 0, "screenshot failed: " + name
+        log("screenshot %s (%d bytes)" % (name, os.path.getsize(path)))
+
+    snap("01_acquisition.png")
+
+    tabs = win.centralWidget()
+    tabs.setCurrentIndex(1)                                 # Analysis tab
+    app.processEvents(); win._update_analysis(); app.processEvents()
+
+    # 4) SpO2 walkthrough produced a value and reports a good-quality pulse
+    assert np.isfinite(win.current_R) and 0.05 < win.current_R < 2.5, "R invalid: %r" % win.current_R
+    spo2 = float(win.lbl_spo2.text())
+    assert 0 <= spo2 <= 100, "SpO2 out of range: %r" % win.lbl_spo2.text()
+    assert win.lbl_quality.objectName() == "qualityGood", "quality not good (%s)" % win.lbl_quality.objectName()
+    log("R = %.3f, SpO2 = %.1f%%, quality = good" % (win.current_R, spo2))
+    snap("02_analysis_spo2.png")
+
+    # 5) heart rate via Peak selection ~ 75 bpm
+    win.cmb_hr_method.setCurrentIndex(1)
+    app.processEvents(); win._update_analysis(); app.processEvents()
+    hr_peak = float(win.lbl_hr.text())
+    assert 70 <= hr_peak <= 80, "peak HR out of range: %r" % win.lbl_hr.text()
+    log("heart rate (peak selection) = %.0f bpm" % hr_peak)
+    inner = [w for w in win.findChildren(QtWidgets.QTabWidget) if w is not tabs]
+    if inner:
+        inner[0].setCurrentIndex(1)                        # Heart rate sub-tab
+        app.processEvents()
+    snap("03_analysis_heartrate.png")
+
+    # 6) alternate SpO2 model (Beer-Lambert) still computes
+    win.cmb_spo2_model.setCurrentIndex(1)
+    app.processEvents(); win._update_analysis(); app.processEvents()
+    assert win.lbl_spo2.text() not in ("--", ""), "Beer-Lambert SpO2 blank"
+    win.cmb_spo2_model.setCurrentIndex(0)
+    log("Beer-Lambert model computed SpO2 = %s%%" % win.lbl_spo2.text())
+
+    # 7) display toggles keep the pipeline healthy
+    tabs.setCurrentIndex(0)
+    for label, setter in (("Remove DC", lambda: win.chk_dc.setChecked(True)),
+                          ("Ambient",  lambda: win.chk_ambient.setChecked(True)),
+                          ("LP off",   lambda: win.chk_lowpass.setChecked(False)),
+                          ("LP cutoff", lambda: win.spin_lowpass.setValue(12.0)),
+                          ("LP on",    lambda: win.chk_lowpass.setChecked(True))):
+        setter()
+        for p in packets[:fs]:
+            win.q.put(tuple(int(x) for x in p))
+        win._drain_and_draw(); app.processEvents()
+    xi2, _ = win.curve_ir.getData()
+    assert xi2 is not None and len(xi2) > 100, "IR curve empty after toggles"
+    if win.chk_ambient.isChecked():
+        xa, _ = win.curve_ir_amb.getData()
+        assert xa is not None and len(xa) > 100, "ambient curve empty when enabled"
+    log("display toggles (Remove DC / Ambient / low-pass) OK")
+
+    # 8) LED sliders accepted (worker inert in test mode)
+    win.sld_ir.setValue(0x20); win.sld_red.setValue(0x18); win._on_led_change()
+    app.processEvents()
+    log("LED sliders OK")
+
+    # 9) Save waveform -> CSV and verify the file
+    csv_path = os.path.join(outdir, "gui_test_capture.csv")
+    written = win._write_csv(csv_path)
+    assert os.path.exists(csv_path), "CSV not written"
+    with open(csv_path, newline="") as f:
+        rows = list(csv.reader(f))
+    assert rows[0] == ["time_s"] + CHANNELS, "CSV header wrong: %r" % rows[0]
+    data_rows = rows[1:]
+    assert len(data_rows) == written >= n, "CSV rows %d (written %d, expected >= %d)" % (
+        len(data_rows), written, n)
+    float(data_rows[0][0]); [int(v) for v in data_rows[0][1:]]      # parse first data row
+    log("Save -> CSV OK (%d rows, %d columns)" % (len(data_rows), len(rows[0])))
+
+    win.close()
+    app.processEvents()
+    log("GUI-TEST PASSED")
 
 
 def _select_port(parent=None):
@@ -1058,6 +1207,10 @@ def main():
         probe_plot.close()
         if len(peaks) != 10 or abs(bpm - 75.0) > 0.01:
             raise RuntimeError("packaged signal-processing self-test failed")
+        return
+    if "--gui-test" in sys.argv:
+        # Full-window interaction test (no serial hardware). Exit non-zero on failure.
+        _gui_selftest(app)
         return
     port = _select_port()
     if not port:

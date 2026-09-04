@@ -30,6 +30,25 @@ jobs:
         env:
           MACOS_ARCH: ${{ matrix.arch }}
         run: bash build_macos.sh
+      - name: GUI interaction test (full window, no hardware)
+        env:
+          GUI_TEST_OUTDIR: ${{ github.workspace }}/gui-test-${{ matrix.arch }}
+        run: |
+          APP="dist/AFE4490_PulseOx.app/Contents/MacOS/AFE4490_PulseOx"
+          echo "== attempt 1: native macOS window =="
+          if "$APP" --gui-test; then
+            echo "native GUI test passed"
+          else
+            echo "native attempt failed (exit $?); retrying with offscreen Qt platform"
+            QT_QPA_PLATFORM=offscreen "$APP" --gui-test
+          fi
+      - name: Upload GUI test screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gui-test-${{ matrix.arch }}
+          path: gui-test-${{ matrix.arch }}
+          if-no-files-found: warn
       - name: Upload packaged app
         uses: actions/upload-artifact@v7
         with:
