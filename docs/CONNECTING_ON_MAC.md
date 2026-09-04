@@ -13,9 +13,10 @@ talks to the PC **"through the USB, using the CDC profile"** — i.e. it is a st
 That matters because:
 
 - **macOS has a built-in CDC-ACM driver.** Any class-compliant CDC-ACM device
-  enumerates automatically as `/dev/cu.usbmodemXXXX` with **no driver install**. This
-  is unlike Windows, where TI ships a one-time `.inf` driver (older Windows shows the
-  board as "MSP430-USB example" under *Other devices* until that driver is bound).
+  enumerates automatically as `/dev/cu.usbmodemXXXX` with **no driver install** — just
+  like **Windows 10/11**, which auto-bind their built-in `usbser.sys` to the board.
+  Students install nothing on either OS. (Only *older* Windows — XP/7/8, the era of
+  SLAU480C — needed a one-time TI `.inf`, shown as "MSP430-USB example" until bound.)
 - **It is class-compliant, not an FTDI/CP210x/CH340 chip.** Those third-party
   USB-serial chips need a vendor kext on macOS; this board does **not** — it uses the
   native MSP430 USB stack, which macOS handles itself.
@@ -40,7 +41,7 @@ That matters because:
 | | Windows | macOS |
 |---|---|---|
 | Port name | `COM4`, `COM7`, … | `/dev/cu.usbmodemXXXX` |
-| Driver | one-time TI `.inf` (Win10/11 often auto-bind `usbser.sys`) | **none** — built-in CDC-ACM |
+| Driver | Win10/11: **none** (auto `usbser.sys`); XP/7/8: one-time TI `.inf` | **none** — built-in CDC-ACM |
 | First appearance | "MSP430-USB example" until driver bound → "Virtual COM Port" | appears directly as `/dev/cu.usbmodem*` |
 | Identify by | VID `2047` / PID `0300` | same VID/PID (from the USB descriptor) |
 | Known quirk | TI GUI needs COM number ≤ 25 (not relevant to this app) | use `cu.*` not `tty.*` (the app already does) |
